@@ -18,14 +18,14 @@ if [ "$action" = "dhcp6-change" ] || [ "$action" = "connectivity-change" ] || [ 
 
     # 比较当前和之前的 IPv6 地址
     if [ "$current_ipv6" != "$previous_ipv6" ]; then
-      # 调用 DNS 更新脚本，传递当前的 IPv6 地址
+      # 调用 DNS 更新脚本，传递当前IPv6 地址
       /bin/cf-ddns6.sh "$current_ipv6"
 
-      # 更新之前的 IPv6 地址
+      # 更新之前的IPv6 地址
       echo "$current_ipv6" > "$ipv6_file"
     fi
   else
-    # 创建之前的 IPv6 地址文件，并保存当前的 IPv6 地址
+    # 创建IPv6 地址文件，并保存当前的IPv6地址
     echo "$current_ipv6" > "$ipv6_file"
   fi
 fi
