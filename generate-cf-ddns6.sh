@@ -7,7 +7,7 @@ IP6=\$(ip -6 addr show dev {interface} | awk '/global/ {print \$2}' | awk -F "/"
 if [ -z "\$IP6" ]; then
   exit
 fi
-curl --request PUT \
+response=\$(curl --write-out %{http_code} --request PUT \
   --url "https://api.cloudflare.com/client/v4/zones/zone_identifier/dns_records/{RecordID}" \
   --header "Content-Type: application/json" \
   --header "X-Auth-Email: {Email}" \
@@ -17,6 +17,11 @@ curl --request PUT \
   "name": "{Domainname}",
   "content": "'"\$IP6"'",
   "proxied": false
-}'
+}')
+if [ "\$response" = "200" ]; then
+  echo "DNS记录更新成功"
+else
+  echo "DNS记录更新失败，HTTP状态码: \$response"
+fi
 EOF
 chmod +x /bin/cf-ddns6.sh
