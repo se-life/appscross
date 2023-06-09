@@ -14,7 +14,7 @@ response=\$(curl --write-out %{http_code} --request PUT \
   --header "Authorization: Bearer {Token}" \
   --data '{
   "type": "AAAA",
-  "name": "{Domainname}",
+  "name": "{Fullname}",
   "content": "'"\$IP6"'",
   "proxied": false
 }')
