@@ -1,0 +1,31 @@
+#!/bin/sh
+
+interface=$1
+action=$2
+
+# 指定之前的 IPv6 地址存储文件路径
+ipv6_file="/etc/NetworkManager/dispatcher.d/previous_ipv6.txt"
+
+# 检查 action 是否为 dhcp6-change、connectivity-change 或 up
+if [ "$action" = "dhcp6-change" ] || [ "$action" = "connectivity-change" ] || [ "$action" = "up" ]; then
+  # 获取当前分配到的 IPv6 地址
+  current_ipv6=$(ip -6 addr show dev "$interface" | awk '/inet6 .* global/ { print $2 }')
+
+  # 检查之前的 IPv6 地址文件是否存在
+  if [ -f "$ipv6_file" ]; then
+    # 读取之前的 IPv6 地址
+    previous_ipv6=$(cat "$ipv6_file")
+
+    # 比较当前和之前的 IPv6 地址
+    if [ "$current_ipv6" != "$previous_ipv6" ]; then
+      # 调用 DNS 更新脚本，传递当前的 IPv6 地址
+      /bin/cf-ddns6.sh "$current_ipv6"
+
+      # 更新之前的 IPv6 地址
+      echo "$current_ipv6" > "$ipv6_file"
+    fi
+  else
+    # 创建之前的 IPv6 地址文件，并保存当前的 IPv6 地址
+    echo "$current_ipv6" > "$ipv6_file"
+  fi
+fi
