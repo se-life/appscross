@@ -7,7 +7,7 @@ IP6=\$(ip -6 addr show dev {Interface} | awk '/global/ {print \$2}' | awk -F "/"
 if [ -z "\$IP6" ]; then
   exit
 fi
-response=\$(curl --write-out %{http_code} --request PUT \
+response=\$(curl -s -o /dev/null -w %{http_code} --request PUT \
   --url "https://api.cloudflare.com/client/v4/zones/{ZoneID}/dns_records/{RecordID}" \
   --header "Content-Type: application/json" \
   --header "X-Auth-Email: {Email}" \
