@@ -31,7 +31,7 @@ Description=Pandora ChatGPT Service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/pandora-cloud --server 0.0.0.0:80
+ExecStart=/usr/local/bin/pandora-cloud --server 0.0.0.0:10085
 
 [Install]
 WantedBy=multi-user.target
