@@ -17,5 +17,3 @@ echo ""
 
 echo "$CF_DOMAINS" | jq '.result[] | [.name, .id] | @tsv'
 echo ""
-
-echo "$CF_DOMAINS" | jq '.result[] | [.name, .id] | @tsv'
