@@ -1,8 +1,9 @@
 #!/bin/bash
 
-read -p "请输入Cloudflare API密钥: " CF_API_KEY
+
 read -p "请输入Cloudflare账户电子邮件地址: " CF_EMAIL
 read -s -p "请输入Cloudflare账户密码: " CF_PASSWORD
+read -s -p "请输入Cloudflare API密钥: " CF_API_KEY
 
 echo ""
 echo "正在获取账户ID..."
