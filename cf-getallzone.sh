@@ -15,5 +15,7 @@ echo ""
 echo "以下是域名及域ID列表："
 echo ""
 
+
+echo "$CF_DOMAINS" > cf-$(date +%Y%m%d-%H%M%S).json
 echo "$CF_DOMAINS" | jq '.result[] | [.name, .id] | @tsv'
 echo ""
