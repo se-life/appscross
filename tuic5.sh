@@ -181,7 +181,7 @@ install()
 	[[ -z $domain ]] && red "未输入域名，无法执行操作！" && exit 1
     blue "已指定计划使用的的完整域名为：${domain}" && sleep 0.2
 	
-	ee -n "[${GREEN}1-2${PLAIN}]请指定tuic服务使用的端口（默认10443）："
+	ee -n "[${GREEN}1-2${PLAIN}]请指定tuic服务使用的端口（1000-65535,默认10443）："
 	read -n 5 port
 	[[ -z $port ]] && port=10443
 	if [[ -n $(netstat -tulnp | grep ${port}) ]]; then
