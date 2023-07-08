@@ -321,10 +321,10 @@ EOF
 	cat << EOF > /usr/local/bin/tuic/client-tuic.json
 {
     "relay": {
-        "server": "proxy86.awn-industry.eu.org:10443",
-        "uuid": "2e14d4dd-35c8-4e38-83ff-e464cf9e5562",
-        "password": "891aa073e20e",
-        "ip": "129.153.101.147",
+        "server": "$domain:$port",
+        "uuid": "$uuid",
+        "password": "$pwd",
+        "ip": "$ip",
         "udp_relay_mode": "quic",
         "congestion_control": "bbr",
         "alpn": ["h3"]
