@@ -47,6 +47,7 @@ uninstall()
 		apt purge socat qrencode -y >/dev/null 2>&1
 		apt autoremove socat qrencode -y >/dev/null 2>&1
 		~/.acme.sh/acme.sh --uninstall  >/dev/null 2>&1
+  		rm -rf ~/.acme.sh
 		sed -i 'acme.sh' /var/spool/cron/crontabs/root >/dev/null 2>&1
 	fi
 	green "${select}Tuic完毕！"
@@ -181,7 +182,7 @@ install()
     blue "已指定计划使用的的完整域名为：${domain}" && sleep 0.2
 	
 	ee -n "[${GREEN}1-2${PLAIN}]请指定tuic服务使用的端口（默认10443）："
-	read port
+	read -n 5 port
 	[[ -z $port ]] && port=10443
 	if [[ -n $(netstat -tulnp | grep ${port}) ]]; then
 		red "端口${port}被占用，请注意安装后务必释放端口..." && sleep 0.2
@@ -243,6 +244,7 @@ EOF
 			
 			ee "正在回退安装..."
 			~/.acme.sh/acme.sh --uninstall  >/dev/null 2>&1
+			rm -rf ~/.acme.sh
 			rm -rf /usr/local/bin/tuic >/dev/null 2>&1
 			apt purge socat qrencode -y >/dev/null 2>&1
 			apt autoremove socat qrencode -y >/dev/null 2>&1
