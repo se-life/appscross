@@ -379,8 +379,10 @@ rules:
 EOF
 
 	green "创建完成！" && sleep 0.3
-	echo ""
-	ee "【${GREEN}6${PLAIN}】Tuic安装部署完成，服务端配置文件如下："  
+	ee "【${GREEN}6${PLAIN}】Tuic安装部署完成！"
+	ee "[${GREEN}6-1${PLAIN}]tuic内核和配置文件均安装于${GREEN}/usr/local/bin/tuic/${PLAIN}目录"
+	slepp 1
+	ee "[${GREEN}6-2${PLAIN}]Tuic安装部署完成，服务端配置文件如下：" 
 	cat /usr/local/bin/tuic/config.json
 	read -n 1 -s -r -p "按任意键退出安装程序，脚本将自动启动Tuic服务..."
 	echo ""
@@ -421,7 +423,7 @@ while true; do
 	ee -n "请输入选项【0-5】（默认为${GREEN}1${PLAIN}）：" && read choice
 	[[ -z $choice ]] && choice='1'
 	case $choice in
-		[1iI] ) install && switch && view ;;
+		[1iI] ) install && switch ;;
 		[2uU] ) uninstall ;;
 		[3cC] ) uninstall 1 ;;
 		[4sS] ) switch ;;
