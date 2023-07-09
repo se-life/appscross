@@ -107,7 +107,7 @@ view()
 		cat "$cfile"
 		echo ""
 		if echo ${cfile} | grep shadowrocket ; then
-			url="tuic://$(jq .host -r ${cfile}):$(jq .port -r ${cfile})?&password=$(jq .password -r ${cfile})@uuid=$(jq .user -r ${cfile})&udp=$(jq .udp -r ${cfile})&alpn=$(jq .alpn -r ${cfile})&mode=$(jq .proto -r ${cfile})#laoe"
+			url="tuic://$(jq .host -r ${cfile}):$(jq .port -r ${cfile})?&password=$(jq .password -r ${cfile})&udp=$(jq .udp -r ${cfile})&alpn=$(jq .alpn -r ${cfile})&mode=$(jq .proto -r ${cfile})#laoe"
 			echo ""
 			echo "Shadowrocket分享链接为：${url}，移动端可扫描以下二维码导入："
 			echo ""
