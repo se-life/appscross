@@ -1,0 +1,466 @@
+#!/bin/bash
+
+alias ee='echo -e'
+shopt -s expand_aliases
+source ~/.bash_profile
+
+red() {	echo -e "\033[31m$1\033[0m"; }
+green() { echo -e "\033[32m$1\033[0m"; }
+blue() { echo -e "\033[36m$1\033[0m"; }
+yellow() { echo -e "\033[33m$1\033[0m"; }
+
+RED="\033[31m"
+GREEN="\033[32m"
+BLUE="\033[36m"
+YELLOW="\033[33m"
+PLAIN="\033[0m"
+
+utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "UTF-8|utf8")
+if [[ -z "$utf8_locale" ]]; then
+    yellow "No UTF-8 locale found"
+else
+    export LC_ALL="$utf8_locale"
+    export LANG="$utf8_locale"
+    export LANGUAGE="$utf8_locale"
+    green "Locale set to $utf8_locale"
+fi
+
+genclientcmd()
+{
+	tools=`basename ${2} .service | sed 's/[0-9]//g'`
+	addr=`curl -s${1}m8 ip.p3terx.com -k | sed -n 1p` 
+	[[ -z ${addr} ]] && return 1
+	[[ $1 -eq 6 ]] && addr="[${addr}]" 
+	if [[ ${tools} == "gost" ]];then
+		clientlisten="-L socks5://:1080?udp=true -F"
+		sps="-L" 
+	else
+		clientlisten="client -L socks5://1080"
+		sps="server"
+	fi
+	forward=`grep ExecStart ${2} | sed 's/.*'"$sps"'//g; s/\/\/.*:/\/\/'"$addr"':/g; s/\ ws:/\ wss:/g; s/restrict-//g '`
+	ee "-客户端连接命令："
+	yellow "    ${tools} ${clientlisten} ${forward}"
+	echo ""
+	return 0
+}
+
+view()
+{
+	echo ""
+	echo "主机名：`hostname`"
+	netip6=`curl -s6m8 ip.p3terx.com -k | sed -n 1p`
+	hostip=`ip -6 addr show | awk '/inet6 .* global/ { print \$2 }' | awk -F "/" '{ print \$1 }'`
+	if [ -z $netip6 ]; then
+		[ -n $hostip ] && ee "IPv6地址：${RED}[${hostip}]无法连通${PLAIN}" ||  ee "IPv6地址：${RED}--${PLAIN}" 
+	else
+		ee "IPv6地址：${GREEN}${netip6}${PLAIN}"
+	fi
+	netip4=`curl -s4m8 ip.p3terx.com -k | sed -n 1p`
+	[ -z $netip4 ] && ee "IPv4地址：${RED}无公共IPv4地址或无法连通${PLAIN}" || ee "IPv4地址：${GREEN}${netip4}${PLAIN}"
+	echo ""
+	while (($# > 0)); do
+		echo "$1"
+		echo "-------------------------------------------"
+		tmpfile=`find / -type f -name $1`
+		if [[ -z ${tmpfile} ]];then
+			ee "${1} ${RED}未安装${PLAIN}"
+			echo "" && shift
+			continue
+		else
+			binfile=`file $tmpfile | grep -e executable | awk -F ':' 'NR==1{print \$1}'` 
+			sysdfile=`find / -name ${1}.service | grep '/etc/systemd/system\|/usr/lib/systemd/system' | head -1`
+			if [ -z ${sysdfile} ]; then
+				ee "WARNING-${1} ${GREEN}已安装${PLAIN}于${dir}，${RED}${1}.service文件${PLAIN}不存在！需要修复..."
+				echo "" && shift
+				continue
+			fi
+			ee "-安装位置：${BLUE}${binfile}${PLAIN}"
+			ee "-版本信息：${BLUE}`${binfile} -V | awk '{print $2}'`${PLAIN}"
+			ee "-服务文件：${BLUE}${sysdfile}${PLAIN}"
+			status=`systemctl is-active $1`
+			[[ ${status} == "active" ]] && ee "-服务状态: ${GREEN}${status}${PLAIN}" || ee "-服务状态: ${RED}${status}${PLAIN}"
+			
+			saddr=`grep ExecStart ${sysdfile} | sed 's/.*:\/\/\(.*\):[0-9]*.*/\1/g' | sed 's/\[\(.*\)\]/\1/g'`
+			if [[ -z ${saddr} ]];then
+				ee "-监听接口：${BLUE}所有IPv4和IPv6接口${PLAIN}"
+				support="all64"
+			elif [[ -z ${saddr//[:0]/} ]];then
+				ee "-监听接口：${BLUE}所有IPv6接口${PLAIN}"
+				support="all6"
+			elif [[ -z ${saddr//[.0]/} ]];then
+				ee "-监听接口：${BLUE}所有IPv4接口${PLAIN}"
+				support="all4"
+			else
+				[[ $saddr =~ "." ]] && support="4" || support="6"
+				ee "-监听接口：${BLUE}IPv${support}接口${saddr}${PLAIN}"
+			fi
+			
+			echo ""
+			lp=`netstat -anlopt | grep ${1} | grep LISTEN | awk '/^tcp6.*/ {print $4}' | cut -d: -f4`
+			[[ -z $lp ]] && ee "-当前TCP6监听端口：${BLUE}-${PLAIN}" || ee "-当前TCP6监听端口：${BLUE}${lp}${PLAIN}"
+			dp=`grep ExecStart ${sysdfile} | grep -Po '(?<=(\]:))[0-9]*'`
+			[[ -z $dp && $1 == "gost" ]] && dp=`grep ExecStart ${sysdfile} | grep -Po '(?<=(\/\/:))[0-9]*'`
+			[[ -z $dp || ! $support =~ "6" ]] && dp="-"
+			ee "-服务文件定义TCP6监听端口：${BLUE}${dp}${PLAIN}"
+			if [[ $support =~ "6" && -n $netip6 ]]; then
+				if [[ $status == "active" ]];then
+					[[ "${dp}" != "${lp}" ]] && ee "-提示：${BLUE}TCP6监听端口与服务文件定义不同，可能已前置分流${PLAIN}"
+				else
+					[[ "${dp}" != "${lp}" ]] && ee "-提示：${BLUE}服务未启动，无法侦测TCP6监听端口${PLAIN}"
+				fi
+				genclientcmd 6 ${sysdfile}
+			else
+				[[ -z $netip6 ]] && ee "-提示：${RED}IPv6接口无效${PLAIN}"
+				[[ $support != *"6"* ]] && ee "-提示：${RED}未设置监听TCP6${PLAIN}"
+			fi
+			
+			echo ""
+			lp=`netstat -anlopt | grep ${1} | grep LISTEN | awk '/^tcp.*/ {print $4}' | cut -d: -f2`
+			[[ -z $lp ]] && ee "-当前TCP4监听端口：${BLUE}-${PLAIN}" || ee "-当前TCP4监听端口：${BLUE}${lp}${PLAIN}"
+			dp=`grep ExecStart ${sysdfile} | grep -Po '(?<=:)[0-9]*'`
+			[[ -z $dp || ! $support =~ "4" ]] && dp="-"
+			ee "-服务文件定义TCP4监听端口：${BLUE}${dp}${PLAIN}"
+			if [[ $support =~ "4" && -n $netip4 ]]; then
+				if [[ $status == "active" ]];then
+					[[ "${dp}" != "${lp}" ]] && ee "-提示：${BLUE}TCP4监听端口与服务文件定义不同，可能已前置分流${PLAIN}"
+				else
+					[[ "${dp}" != "${lp}" ]] && ee "-提示：${BLUE}服务未启动，无法侦测TCP4监听端口${PLAIN}"
+				fi
+				genclientcmd 4 ${sysdfile}
+			else
+				[[ -z $netip4 ]] && ee "-提示：${RED}IPv4接口无效${PLAIN}"
+				[[ $support != *"4"* ]] && ee "-提示：${RED}未设置监听TCP4${PLAIN}"
+			fi
+			echo "" &&	shift
+		fi
+	done
+	read -n 1 -s -r -p "请按任意键返回..."
+	return 0
+}
+
+installunit()
+{
+	curl -sSL $2 -o "${1}.tar.gz"  >/dev/null 2>&1
+	mkdir -p $3
+	tar -zxvf "${1}.tar.gz" -C $3  >/dev/null 2>&1
+	chmod 755 "${3}/${1}"
+	rm -f "${1}.tar.gz"
+	sleep 0.3
+}
+
+gensystemd()
+{
+	UUID=$(cat /proc/sys/kernel/random/uuid | sed 's/-//g') >/dev/null 2>&1
+	ee -n "${GREEN}UUID生成${PLAIN}>>"
+	ipaddr=`curl -s6m8 ip.p3terx.com -k | sed -n 1p`
+	if [[ -z ${ipaddr} ]];then
+		ee -n "${RED}IPv6接口无效,自动切换为安装IPv4节点！${PLAIN}>>" 
+		ipaddr=`curl -s4m8 ip.p3terx.com -k | sed -n 1p`
+		[[ -z ${ipaddr} ]] && ee -n "${RED}IPv4接口无效,请自行排查！${PLAIN}>>"  
+	fi 
+	[[ -n ${ipaddr//[.0-9]/} ]] && saddr="[::0]" || saddr="0.0.0.0"
+	[[ $1 == "gost" ]] && TOOLSTART="${2}/${1} -L wss://${saddr}:${3}?path=/${UUID}" || TOOLSTART="${2}/${1} server --restrict-http-upgrade-path-prefix ${UUID} wss://${saddr}:${3}"
+	ee -n "${GREEN}生成${1}.service文件${PLAIN}..."
+	cat << EOF > /etc/systemd/system/${1}.service
+[Unit]
+Description=A WSS proxy server created using ${1} by LAOE
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=${TOOLSTART}
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+	sleep 0.5
+	return 0
+}
+
+switch()
+{
+	echo ""
+	tmpfile=`find / -type f -name $1`
+	if [[ -z ${tmpfile} ]];then
+		ee -n "${1}${RED}未安装${PLAIN} >> "
+		read -n 1 -s -r -p "请按任意键返回..."
+		return 1
+	fi
+	sysdfile=`find / -name ${1}.service | grep '/etc/systemd/system\|/usr/lib/systemd/system' | head -1`
+	if [ -z $sysdfile ]; then
+		ee -n "${sysdfile}${RED}不存在${PLAIN} >> "
+		read -n 1 -s -r -p "请按任意键返回..."
+		return 1
+	fi
+	echo ""
+	status=`systemctl is-active $1`
+	ee -n "${1}当前服务状态为:"
+	if [[ $status == "active" ]];then
+		ee "${GREEN}${status}${PLAIN}"
+		next="stop"
+	else
+		ee "${RED}${status}${PLAIN}"
+		next="start"
+	fi
+	declare -A trans
+	trans=(["stop"]="停止" ["start"]="启动")
+	ee -n "正在${trans[$next]}${1}..."
+	systemctl $next $1
+	green "OK"
+	
+	echo "${1}服务当前状态（如有异常请调试）："
+	echo "-------------------------------------------"
+	systemctl status $1 -n 3 --no-pager
+	echo "-------------------------------------------"
+	read -n 1 -s -r -p "请按任意键返回..."
+	unset -v trans
+	return 0
+}
+
+uninstall()
+{
+	echo ""
+	while (($# > 0)); do
+		if [[ -z $(systemctl list-unit-files --type=service | grep ${1}) ]]; then
+			ee "没有在主机${BLUE}$(hostname)${PLAIN}上检测到${1}，无需卸载..." 
+			shift && continue
+		fi
+		echo "正在卸载${1}..."
+		echo "-------------------------------------------"
+		ee -n "停止并删除${1}.service服务..."
+		systemctl stop ${1}.service >/dev/null 2>&1
+		systemctl disable ${1}.service >/dev/null 2>&1
+		if [ -f /etc/systemd/system/${1}.service ]; then
+			rm -f /etc/systemd/system/${1}.service >/dev/null 2>&1
+		fi
+		green "OK"
+		echo ""
+		ee -n "删除${1}程序文件..."
+		if [ -d /opt/${1} ]; then
+			rm -rf /opt/${1} >/dev/null 2>&1
+		fi
+		green "OK"
+		echo ""
+		shift
+	done
+	read -n 1 -s -r -p "卸载完成！请按任意键返回..."
+}
+
+install()
+{
+	echo ""
+	echo "1-正在验证系统架构..."
+	echo "-------------------------------------------"
+	osCheck=`uname -a`
+	if [[ $osCheck =~ 'x86_64' ]]; then
+	    architecture="amd64"
+	elif [[ $osCheck =~ 'arm64' || $osCheck =~ 'aarch64' ]]; then
+		architecture="arm64"
+	elif [[ $osCheck =~ 'armv7l' ]]; then
+		architecture="armv7"
+	else
+		red "脚本暂不支持的系统架构，请手动下载安装。非常抱歉..."
+		read -n 1 -s -r -p "请按任意键退出..."
+		exit 1
+	fi
+
+	if [[ $osCheck =~ 'Debian' || $osCheck =~ 'Ubuntu' ]]; then
+		cmd="apt"
+	elif [[ $osCheck =~ 'CentOS' ]]; then
+		cmd="yum"
+	else
+		red "脚本暂不支持的操作系统，请手动下载安装。非常抱歉..."
+		read -n 1 -s -r -p "请按任意键退出..."
+		exit 1
+	fi
+	green "验证完成，脚本支持您的系统！"
+	echo ""
+	ee -n "请输入安装选项【1-3】（0-放弃安装并返回 1-全部安装 2-仅安装gost 3-仅安装wstunnel，默认为${GREEN}1-全部安装${PLAIN}）："
+	read -n 1 toolselect
+	[[ $toolselect == 0 ]] && return 0
+	[[ -z $toolselect || -n ${toolselect//[1-3]/} ]] && toolselect=1
+	TOOLS=("gost" "wstunnel")
+	isINSTALLED=(0 0)
+	echo ""
+	if [[ $toolselect >1 ]];then
+		[[ -n `find / -type f -name ${TOOLS[$toolselect-2]}` ]] && isINSTALLED[$toolselect-2]=1
+		if [[ ${isINSTALLED[$toolselect-2]} > 0 ]];then
+			ee -n "${TOOLS[$toolselect-2]}已安装！>> "
+			read -n 1 -s -r -p "请按任意键返回..."
+			return 2
+		fi
+	else
+		for i in ${!TOOLS[@]};do
+			[[ -n `find / -type f -name ${TOOLS[$i]}` ]] && isINSTALLED[$i]=1	
+		done
+		if [[ ${isINSTALLED[0]} > 0 && ${isINSTALLED[1]} > 0 ]];then
+			ee -n "gost和wstunnel均已安装！ >> "
+			read -n 1 -s -r -p "请按任意键返回..."
+			return 2
+		fi
+	fi	
+	echo ""
+	echo "net.ipv6.conf.all.disable_ipv6=0" >> /etc/sysctl.conf
+	echo "net.ipv6.conf.default.disable_ipv6=0" >> /etc/sysctl.conf
+	echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
+	echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
+	echo "net.ipv4.tcp_window_scaling=1" >> /etc/sysctl.conf 
+	echo "net.ipv4.tcp_fastopen=3" >> /etc/sysctl.conf 
+	sysctl -p >/dev/null 2>&1
+	
+	echo ""
+	echo "2-正在更新软件列表并安装curl,netstat等..."
+	echo "-------------------------------------------"
+	ee -n "更新软件列表..."
+	$cmd update -y >/dev/null 2>&1
+	green "OK"
+	ee -n "安装curl,net-tools..."
+	$cmd install curl net-tools -y >/dev/null 2>&1
+	green "OK"
+	green "更新完成！"
+	echo ""
+	
+	REPOPREFIX=("go-gost" "erebe")
+	echo ""
+	echo "3-正在自动获取工具最新版本并生成下载链接..."
+	echo "-------------------------------------------"
+	for i in ${!TOOLS[@]}
+	do
+		INSTDIR[$i]="/opt/${TOOLS[$i]}"
+		REPOS[$i]="${REPOPREFIX[$i]}/${TOOLS[$i]}"
+		LATEST[$i]=`curl -s https://api.github.com/repos/${REPOS[$i]}/releases | grep tag_name | head -1 | awk -F'["]' '{print $4}'`
+		LINK[$i]="https://github.com/${REPOS[$i]}/releases/download/${LATEST[$i]}/${TOOLS[$i]}_${LATEST[$i]:1}_linux_${architecture}.tar.gz"
+	done
+	green "获取完成！"
+	echo ""
+	echo "4-正在安装..."
+	echo "-------------------------------------------"
+	if [[ $toolselect >1 ]];then
+		ee -n "安装${TOOLS[$toolselect-2]}..."
+		installunit ${TOOLS[$toolselect-2]} ${LINK[$toolselect-2]} ${INSTDIR[$toolselect-2]}
+		green "OK"
+	else
+		for i in ${!TOOLS[@]};do
+			ee -n "安装${TOOLS[$i]}..."
+			installunit ${TOOLS[$i]} ${LINK[$i]} ${INSTDIR[$i]}
+			green "OK"
+		done
+	fi
+	echo ""
+	echo "5-正在配置系统服务及开机启动..."
+	echo "-------------------------------------------"
+	while true; do
+		temp=`shuf -i 10000-65535 -n1`
+		[[ `netstat -an | grep :${temp} | awk '$NF == "LISTEN" {print $0}' | wc -l` == 0 ]] && PORT=$temp && break
+	done	
+	ee -n "随机生成的监听端口号为${GREEN}$PORT${PLAIN},直接回车确认,如需手动指定请输入10000-65535间的端口号："
+	read -n 5 pt
+	echo ""
+	if [[ -n $pt ]]; then
+		if [[ -z ${pt//[0-9]/}  && $pt < 65535 && $pt > 10000 ]]; then
+			[[ `netstat -an | grep :${temp} | awk '$NF == "LISTEN" {print $0}' | wc -l` == 0 ]] && PORT=${pt} || ee "端口${RED}${pt}${PLAIN}已占用，仍将使用${GREEN}$PORT${PLAIN}作为初始端口！"
+		else
+			ee "错误输入${RED}${pt}${PLAIN}，仍将使用${GREEN}$PORT${PLAIN}作为初始端口！"
+		fi
+	fi
+	echo ""
+	if [[ $toolselect >1 ]];then
+		ee -n "创建${TOOLS[$toolselect-2]}服务描述文件..."
+		gensystemd ${TOOLS[$toolselect-2]} ${INSTDIR[$toolselect-2]} $PORT
+		green "OK"
+	else
+		for i in ${!TOOLS[@]};do
+			ee -n "创建${TOOLS[$i]}服务描述文件..."
+			gensystemd ${TOOLS[$i]} ${INSTDIR[$i]} $((PORT+i))
+			green "OK"
+		done
+	fi
+	echo ""
+	echo "6-正在启动代理服务..."
+	echo "-------------------------------------------"
+	if [[ $toolselect >1 ]];then
+		ee -n "设置${TOOLS[$toolselect-2]}开机启动..."
+		systemctl daemon-reload >/dev/null 2>&1
+		systemctl enable ${TOOLS[$toolselect-2]}  >/dev/null 2>&1
+		systemctl start ${TOOLS[$toolselect-2]}  >/dev/null 2>&1
+		green "OK"
+	else
+		for i in ${!TOOLS[@]};do
+			ee -n "设置${TOOLS[$i]}开机启动..."
+			systemctl daemon-reload >/dev/null 2>&1
+			systemctl enable ${TOOLS[$i]}  >/dev/null 2>&1
+			systemctl start ${TOOLS[$i]}  >/dev/null 2>&1
+			green "OK"
+		done
+	fi
+	echo ""
+	green "安装完成，代理服务已启动！"
+	echo ""
+	echo "7-本机代理服务配置信息..."
+	echo "-------------------------------------------"
+	view "gost" "wstunnel"
+	echo ""
+	green "安装配置已全部完成，脚本将在3秒后返回主程序..."
+	sleep 3
+	return 0
+}
+
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "$(whoami)不是root用户，脚本需要root权限以安装配置tuic服务，请退出后切换为root用户后运行！"
+    exit 1
+fi
+
+while true; do
+	clear
+	echo ""
+	echo "【Gost及wstunnel WSS IPv6优先节点搭建管理脚本 by LaoE】"
+	ee "+-------------------------------------------------------+"
+	ee "  以下链接可按住Ctrl点击直接访问："
+    ee "  LaoE YT频道：https://www.youtube.com/@without_answer"
+	ee "  LaoE Blog：https://www.appscross.com"
+	ee "  LaoE B站频道：https://space.bilibili.com/1323796788"
+	ee "+-------------------------------------------------------+"
+	
+	ee "主机${BLUE}$(hostname)${PLAIN}基本信息："
+	ee "+-------------------------------------------------------+"
+	ee  "  系统版本：${BLUE}`cat /etc/issue | awk 'NR==1 {print $1,$2,$3}'`${PLAIN}"
+	ee  "  内核版本：${BLUE}`uname -r`${PLAIN}"      
+	ee  "  系统内存：${BLUE}`free -m | sed -n "2,2p" | awk '{print $2}'`MB${PLAIN}"
+	ee  "  存储空间：${BLUE}`df -lm | awk '!a[$1]++{print}' | awk '!a[$2]++{print}' | awk '{sum+=$2}END{print sum}'`MB${PLAIN}"
+	ee "+-------------------------------------------------------+"
+	echo ""
+	echo "========================================================="
+	ee "【${BLUE}1${PLAIN}】${GREEN}安装${PLAIN}WSS节点(${BLUE}I${PLAIN}nstall)"
+	echo "---------------------------------------------------------"
+	ee "【${BLUE}2${PLAIN}】${RED}卸载${PLAIN}所有WSS代理(Uninstall ${BLUE}A${PLAIN}ll)"
+	ee "【${BLUE}3${PLAIN}】${RED}卸载${PLAIN}Gost(Uninstall ${BLUE}G${PLAIN}ost)"
+	ee "【${BLUE}4${PLAIN}】${RED}卸载${PLAIN}Wstunnel(Uninstall ${BLUE}W${PLAIN}stunnel)"
+	echo "---------------------------------------------------------"
+	ee "【${BLUE}5${PLAIN}】启停Gost(Switch G${BLUE}o${PLAIN}st)"
+	ee "【${BLUE}6${PLAIN}】启停Wstunnel(Switch Ws${BLUE}t${PLAIN}unnel)"
+	echo "---------------------------------------------------------"
+	ee "【${BLUE}7${PLAIN}】${GREEN}查看${PLAIN}WSS代理服务信息(${BLUE}V${PLAIN}iew Info)"
+	echo "---------------------------------------------------------"
+	ee "【${BLUE}0${PLAIN}】${RED}退出${PLAIN}(${BLUE}Q${PLAIN}uit)"
+	echo "========================================================="
+	ee -n "请输入选项【0-7】（默认为${GREEN}1${PLAIN}）：" && read choice
+	[[ -z $choice ]] && choice='1'
+	case $choice in
+		[1iI] ) install ;;
+		[2aA] ) uninstall "gost" "wstunnel" ;;
+		[3gG] ) uninstall "gost" ;;
+		[4wW] ) uninstall "wstunnel" ;;
+		[5oO] ) switch "gost" ;;
+		[6tT] ) switch "wstunnel" ;;
+		[7vV] ) view "gost" "wstunnel";;
+		[0qQ] ) break ;;
+		* ) read -n 1 -s -r -p  "无效，请重新选择..." ;;
+	esac
+done
+unalias ee
+echo ""
+rm -rf $0
+exit 0
